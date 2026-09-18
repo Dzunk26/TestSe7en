@@ -18,18 +18,24 @@ public class CameraController : MonoBehaviour {
         OnInit();
     }
 
+    private void Update() {
+        ListenInput();
+    }
+
     private void LateUpdate() {
         CameraLogic();
     }
 
     public void OnInit() {
         originPosition = transform.position;
-        followTarget.rotation = Quaternion.identity;
-        Debug.Log(followTarget.rotation);
+    }
+
+    private void ListenInput() {
+        lookInputVector = GameInput.Instance.GetLookInputVector();
     }
 
     private void CameraLogic() {
-        lookInputVector = GameInput.Instance.GetLookInputVector();
+        if (lookInputVector.sqrMagnitude < 0.001f) return;
 
         float inputY = lookInputVector.y * rotationSpeed * Time.deltaTime;
         float inputX = lookInputVector.x * rotationSpeed * Time.deltaTime;

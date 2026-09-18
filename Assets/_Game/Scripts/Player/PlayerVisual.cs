@@ -12,6 +12,7 @@ public enum AnimState {
 }
 
 public class PlayerVisual : MonoBehaviour {
+    public Animator Animator => animator;
     public Transform TF { 
         get {
             if (tf == null) {
@@ -51,7 +52,11 @@ public class PlayerVisual : MonoBehaviour {
         ChangeAnimState(AnimState.Interact);
     }
 
-    public void OnDeath() {
+    public void OnWin() {
+
+    }
+
+    public void OnDead() {
         ChangeAnimState(AnimState.Death);
     }
 

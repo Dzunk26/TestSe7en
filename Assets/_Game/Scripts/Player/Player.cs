@@ -1,6 +1,17 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
+public enum PlayerState {
+    Idle,
+    Run,
+    Jump,
+    Fall,
+    Interact,
+    Dead,
+    Win
+}
 
 public class Player : MonoBehaviour {
     public Transform TF {
@@ -16,8 +27,9 @@ public class Player : MonoBehaviour {
     [SerializeField] private PlayerVisual playerVisual;
     [SerializeField] private Transform playerObj;
     [SerializeField] private Camera playerCamera;
+    [SerializeField] private CharacterController characterController;
 
-    [SerializeField] private float moveSpeed = 10f;
+    [SerializeField] private float moveSpeed = 7.5f;
     [SerializeField] private float rotateSpeed = 50f;
     [SerializeField] private float maxJumpHeight = 2.5f;
     [SerializeField] private float maxJumpTime = 1f;
@@ -26,13 +38,14 @@ public class Player : MonoBehaviour {
     [SerializeField] private LayerMask groundLayerMask;
     [SerializeField] private float raycastDistance = 0.2f;
 
+    private GameInput gameInput;
     private Vector2 inputVector;
     private Transform tf;
     private bool isJumping;
-    private bool isFalling;
     private float verticalVelocity;
     private float gravity;
     private float initialJumpVelocity;
+    private PlayerState currentState;
 
     private void OnEnable() {
         OnInit();
@@ -41,34 +54,71 @@ public class Player : MonoBehaviour {
     private void Update() {
         ListenInput();
 
-        //HandleJump();
+        HandleGravity();
 
-        if (inputVector.sqrMagnitude > 0.001f) {
-            HandleMovement();
-            playerVisual.OnRun();
-        }
-        else {
-            playerVisual.OnIdle();
-        }
+        HandlePlayerState();
     }
 
-    private void OnTriggerEnter(Collider other) {
-        if (other.CompareTag(Constant.DEAD_TRIGGER_TAG)) {
-
-        }
-        else if (other.CompareTag(Constant.DEAD_TRIGGER_TAG)) {
-
-        }
+    private void OnDisable() {
+        OnDespawn();
     }
 
     public void OnInit() {
         playerVisual.OnInit();
         isJumping = false;
+        ChangeState(PlayerState.Idle);
         SetupJumpVariables();
+        gameInput = GameInput.Instance;
+        gameInput.OnJumpAction += GameInput_OnJumpAction;
+    }
+
+    public void OnDespawn() {
+        if (gameInput == null) return;
+        gameInput.OnJumpAction -= GameInput_OnJumpAction;
+    }
+
+    private void GameInput_OnJumpAction(object sender, System.EventArgs e) {
+        if ((currentState == PlayerState.Idle || currentState == PlayerState.Run) && IsGrounded() && !isJumping) {
+            StartJump();
+        }
     }
 
     public void OnInteract() {
-        playerVisual.OnInteract();
+        ChangeState(PlayerState.Interact);
+    }
+
+    public void OnDead() {
+        ChangeState(PlayerState.Dead);
+    }
+
+    public void OnWin() {
+        ChangeState(PlayerState.Win);
+    }
+
+    private void HandlePlayerState() {
+        switch (currentState) {
+            case PlayerState.Idle:
+                HandleIdle();
+                break;
+            case PlayerState.Run:
+                HandleRun();
+                break;
+            case PlayerState.Jump:
+                HandleJump();
+                break;
+            case PlayerState.Fall:
+                HandleFall();
+                break;
+            case PlayerState.Interact:
+                HandleInteract();
+                break;
+            case PlayerState.Dead:
+                HandleDead();
+                break;
+            case PlayerState.Win:
+                HandleWin();
+                break;
+        }
     }
 
     private void SetupJumpVariables() {
@@ -78,7 +128,38 @@ public class Player : MonoBehaviour {
     }
 
     private void ListenInput() {
-        inputVector = GameInput.Instance.GetMovementVectorNormalized();
+        inputVector = gameInput.GetMovementVectorNormalized();
+    }
+
+    private bool IsMoving() {
+        return inputVector.sqrMagnitude > 0.01f;
+    }
+
+    private void HandleIdle() {
+        playerVisual.OnIdle();
+
+        if (!IsGrounded()) {
+            ChangeState(PlayerState.Fall);
+            return;
+        }
+
+        if (IsMoving()) {
+            ChangeState(PlayerState.Run);
+        }
+    }
+
+    private void HandleRun() {
+        if (!IsGrounded()) {
+            ChangeState(PlayerState.Fall);
+            return;
+        }
+
+        playerVisual.OnRun();
+        HandleMovement();
+
+        if (!IsMoving()) {
+            ChangeState(PlayerState.Idle);
+        }
     }
 
     private void HandleMovement() {
@@ -93,70 +174,99 @@ public class Player : MonoBehaviour {
         Vector3 moveDir = (camForward * inputVector.y + camRight * inputVector.x).normalized;
         Vector3 nextPosition = moveDir * moveSpeed * Time.deltaTime;
 
-        TF.position = Vector3.MoveTowards(TF.position, nextPosition, 1f);
+        characterController.Move(nextPosition);
 
         if (inputVector.sqrMagnitude > 0.001f) {
-            TF.forward = Vector3.Lerp(TF.forward, moveDir, rotateSpeed * Time.deltaTime);
+            Quaternion targetRot = Quaternion.LookRotation(moveDir);
+            playerObj.rotation = Quaternion.Slerp(playerObj.rotation, targetRot, rotateSpeed * Time.deltaTime);
         }
+    }
+
+    private void StartJump() {
+        isJumping = true;
+        verticalVelocity = initialJumpVelocity;
+        playerVisual.OnStartJump();
+        ChangeState(PlayerState.Jump);
     }
 
     private void HandleJump() {
-        if (!isJumping && IsGrounded() && GameInput.Instance.IsJumpPressed()) {
-            isJumping = true;
-            isFalling = false;
-            verticalVelocity = initialJumpVelocity;
-            playerVisual.OnStartJump();
+        HandleMovement();
+
+        if (verticalVelocity <= 0f) {
+            ChangeState(PlayerState.Fall);
         }
-        float previousYVelocity = verticalVelocity;
-
-        if (IsGrounded() && verticalVelocity < 0f) {
-            verticalVelocity = Constant.GROUNDED_GRAVITY;
-            isJumping = false;
-            isFalling = false;
-        }
-        else {
-            float currentGravity = gravity;
-            if (verticalVelocity < 0f) {
-                currentGravity *= fallMultiplier;
-                isFalling = true;
-                playerVisual.OnFalling();
-            }
-
-            verticalVelocity += currentGravity * Time.deltaTime;
-        }
-
-        float averageVelocity = (previousYVelocity + verticalVelocity) * 0.5f;
-
-        Vector3 verticalMove = Vector3.up * averageVelocity * Time.deltaTime;
-        TF.position += verticalMove;
     }
 
     private void HandleGravity() {
-        if (IsGrounded()) {
-            Vector3 pos = TF.position;
-            pos.y = Constant.GROUNDED_GRAVITY;
-            TF.position = pos;
-        }
-        else if (TF.position.y < 0) {
+        float currentGravity = gravity;
 
+        if (verticalVelocity < 0f) {
+            currentGravity *= fallMultiplier;
         }
-        else {
-            float previousYVelocity = TF.position.y;
-            float newYVelocity = TF.position.y + (Constant.GRAVITY * Time.deltaTime);
-            float nextYVelocity = (previousYVelocity + newYVelocity) / 2;
-            Vector3 newPos = TF.position;
-            newPos.y = newYVelocity;
-            TF.position = newPos;
+
+        verticalVelocity += currentGravity * Time.deltaTime;
+
+        if (verticalVelocity < -20f) {
+            verticalVelocity = -20f;
         }
+
+        characterController.Move(Vector3.up * verticalVelocity * Time.deltaTime);
+    }
+
+    private void HandleFall() {
+        HandleMovement();
+        playerVisual.OnFalling();
+
+        if (IsGrounded()) {
+            verticalVelocity = Constant.GROUNDED_GRAVITY;
+            isJumping = false;
+
+            if (IsMoving()) {
+                ChangeState(PlayerState.Run);
+            }
+            else {
+                ChangeState(PlayerState.Idle);
+            }
+        }
+    }
+
+    private void HandleInteract() {
+        playerVisual.OnInteract();
+
+        AnimatorStateInfo stateInfo = playerVisual.Animator.GetCurrentAnimatorStateInfo(0);
+
+        if (stateInfo.IsName("Interact") && stateInfo.normalizedTime >= 1f) {
+            if (IsMoving()) {
+                ChangeState(PlayerState.Run);
+            }
+            else {
+                ChangeState(PlayerState.Idle);
+            }
+        }
+    }
+
+    private void HandleDead() {
+        playerVisual.OnDead();
+    }
+
+    private void HandleWin() {
+        playerVisual.OnWin();
     }
 
     private bool IsGrounded() {
-        Vector3 startPoint = TF.position + Vector3.up * raycastDistance / 2;
+        float radius = characterController.radius * 0.95f;
+        Vector3 center = TF.position + characterController.center;
+        float halfHeight = characterController.height * 0.5f - radius;
 
-        Physics.Raycast(startPoint, Vector3.down, out RaycastHit hit, raycastDistance, groundLayerMask);
+        Vector3 point1 = center + Vector3.up * halfHeight;
+        Vector3 point2 = center + Vector3.down * halfHeight;
 
-        return hit.collider != null;
+        return Physics.CapsuleCast(point1, point2, radius, Vector3.down, raycastDistance, groundLayerMask);
     }
 
+    private void ChangeState(PlayerState state) {
+        if (currentState == state) return;
 
+        currentState = state;
+    }
 }

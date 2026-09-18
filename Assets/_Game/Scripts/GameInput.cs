@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class GameInput : Singleton<GameInput> {
-    public event EventHandler OnInteractAction;
+    public event EventHandler OnJumpAction;
 
     private PlayerInputActions inputActions;
 
@@ -13,17 +13,21 @@ public class GameInput : Singleton<GameInput> {
         inputActions = new PlayerInputActions();
         inputActions.Player.Enable();
 
-        inputActions.Player.Interact.performed += Interact_performed;
+        inputActions.Player.Jump.performed += Jump_performed;
     }
 
     private void OnDestroy() {
-        inputActions.Player.Interact.performed -= Interact_performed;
+        if (inputActions == null) return;
+
+        inputActions.Player.Jump.performed -= Jump_performed;
+
+        inputActions.Player.Disable();
 
         inputActions.Dispose();
     }
 
-    private void Interact_performed(UnityEngine.InputSystem.InputAction.CallbackContext obj) {
-
+    private void Jump_performed(InputAction.CallbackContext obj) {
+        OnJumpAction?.Invoke(this, EventArgs.Empty);
     }
 
     public Vector2 GetMovementVectorNormalized() {

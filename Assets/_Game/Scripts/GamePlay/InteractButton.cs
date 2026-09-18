@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class Door : MonoBehaviour, IInteractable {
-    [SerializeField] private float openAngle;
+public class InteractButton : MonoBehaviour, IInteractable {
+    [SerializeField] private float delay = 0.5f;
     [SerializeField] private Button interactButton;
     [SerializeField] private SphereCollider detectCollider;
-    [SerializeField] private float rangeOffset = 0.5f; // khoang cong them cho range tranh bi bug
+    [SerializeField] private float rangeOffset = 2.25f; // khoang cong them cho range tranh bi bug
+    [SerializeField] private List<Platform> platforms;
 
-    private bool isOpened = false;
+    private bool isOpenPlatform = false;
     private bool isDetectPlayer = false;
     private float rangeDectecCollider;
     private Player player;
@@ -17,7 +18,7 @@ public class Door : MonoBehaviour, IInteractable {
 
     private void Awake() {
         interactButton.onClick.AddListener(Interact);
-        tf = transform;
+        OnInit();
     }
 
     private void Update() {
@@ -29,7 +30,7 @@ public class Door : MonoBehaviour, IInteractable {
     }
 
     private void OnTriggerEnter(Collider other) {
-        if (other.CompareTag(Constant.PLAYER_TAG) && !isOpened) {
+        if (other.CompareTag(Constant.PLAYER_TAG) && !isOpenPlatform) {
             ShowUI();
             player = Cache.GetPlayer(other);
             isDetectPlayer = true;
@@ -37,20 +38,38 @@ public class Door : MonoBehaviour, IInteractable {
     }
 
     public void OnInit() {
+        isDetectPlayer = false;
+        isOpenPlatform = false;
+        tf = transform;
         rangeDectecCollider = detectCollider.radius + rangeOffset;
+        CloseUI();
     }
 
     public void Interact() {
         if (player == null) return;
 
-        OpenDoor();
+        player.OnInteract();
+        OpenPlatforms();
         CloseUI();
     }
 
-    private void OpenDoor() {
-        if (isOpened) return;
-        
-        isOpened = true;
+    private void OpenPlatforms() {
+        if (platforms == null || platforms.Count < 0) return;
+        isOpenPlatform = true;
+
+        StartCoroutine(IEOpenPlatforms());
+    }
+
+    private IEnumerator IEOpenPlatforms() {
+        for (int i = 0; i < platforms.Count; i++) {
+            if (platforms[i] != null) {
+                platforms[i].Appear();
+            }
+
+            if (i < platforms.Count - 1) {
+                yield return new WaitForSeconds(delay);
+            }
+        }
     }
 
     private void ShowUI() {
@@ -62,6 +81,6 @@ public class Door : MonoBehaviour, IInteractable {
     }
 
     private bool IsPlayerOutOfDetectTrigger() {
-        return Vector3.Distance(tf.position, player.TF.position) >= rangeDectecCollider;
+        return Vector3.Distance(detectCollider.transform.position, player.TF.position) >= rangeDectecCollider;
     }
 }

@@ -1,16 +1,17 @@
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class InteractButton : MonoBehaviour, IInteractable {
+public class Door : MonoBehaviour, IInteractable {
     [SerializeField] private float openAngle;
+    [SerializeField] private float openDuration = 0.5f;
     [SerializeField] private Button interactButton;
     [SerializeField] private SphereCollider detectCollider;
-    [SerializeField] private float rangeOffset = 0.5f; // khoang cong them cho range tranh bi bug
-    [SerializeField] private List<Platform> platforms;
+    [SerializeField] private float rangeOffset = 2.25f; // = player height (khoang cong them cho range tranh bi bug)
 
-    private bool isInteracted = false;
+    private bool isOpened = false;
     private bool isDetectPlayer = false;
     private float rangeDectecCollider;
     private Player player;
@@ -18,7 +19,7 @@ public class InteractButton : MonoBehaviour, IInteractable {
 
     private void Awake() {
         interactButton.onClick.AddListener(Interact);
-        tf = transform;
+        OnInit();
     }
 
     private void Update() {
@@ -30,7 +31,7 @@ public class InteractButton : MonoBehaviour, IInteractable {
     }
 
     private void OnTriggerEnter(Collider other) {
-        if (other.CompareTag(Constant.PLAYER_TAG) && !isInteracted) {
+        if (other.CompareTag(Constant.PLAYER_TAG) && !isOpened) {
             ShowUI();
             player = Cache.GetPlayer(other);
             isDetectPlayer = true;
@@ -38,20 +39,25 @@ public class InteractButton : MonoBehaviour, IInteractable {
     }
 
     public void OnInit() {
+        tf = transform;
         rangeDectecCollider = detectCollider.radius + rangeOffset;
+        CloseUI();
     }
 
     public void Interact() {
         if (player == null) return;
-        
+
+        player.OnInteract();
         OpenDoor();
         CloseUI();
     }
 
     private void OpenDoor() {
-        if (platforms == null || platforms.Count < 0) return;
-
+        if (isOpened) return;
         
+        isOpened = true;
+
+        tf.DOLocalRotate(new Vector3(0f, openAngle, 0f), openDuration).SetEase(Ease.OutQuad);
     }
 
     private void ShowUI() {
@@ -63,6 +69,6 @@ public class InteractButton : MonoBehaviour, IInteractable {
     }
 
     private bool IsPlayerOutOfDetectTrigger() {
-        return Vector3.Distance(tf.position, player.TF.position) >= rangeDectecCollider;
+        return Vector3.Distance(detectCollider.transform.position, player.TF.position) >= rangeDectecCollider;
     }
 }
